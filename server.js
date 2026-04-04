@@ -1,4 +1,5 @@
 import express from "express";
+import fetch from "node-fetch";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,7 +18,7 @@ app.get("/test", (req, res) => {
   res.json({ status: "ok", time: new Date() });
 });
 
-// ENV debug route (temporary)
+// ENV debug route
 app.get("/env", (req, res) => {
   res.json({
     TRANSLINK_API_KEY: process.env.TRANSLINK_API_KEY
