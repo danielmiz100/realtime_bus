@@ -17,6 +17,15 @@ app.get("/test", (req, res) => {
   res.json({ status: "ok", time: new Date() });
 });
 
+// ENV debug route (temporary)
+app.get("/env", (req, res) => {
+  res.json({
+    TRANSLINK_API_KEY: process.env.TRANSLINK_API_KEY
+      ? "SET"
+      : "NOT SET",
+  });
+});
+
 // Bus lookup using TransLink API
 app.get("/api/bus", async (req, res) => {
   const stopId = req.query.stop;
@@ -36,6 +45,8 @@ app.get("/api/bus", async (req, res) => {
 
     const url = `https://api.translink.ca/rttiapi/v1/stops/${stopId}/estimates?apikey=${apiKey}&count=3&timeframe=60`;
 
+    console.log("Fetching:", url);
+
     const response = await fetch(url, {
       headers: {
         Accept: "application/json",
@@ -44,6 +55,8 @@ app.get("/api/bus", async (req, res) => {
 
     if (!response.ok) {
       const text = await response.text();
+      console.error("TransLink API ERROR RESPONSE:", text);
+
       return res.status(500).json({
         error: "TransLink API error",
         details: text,
@@ -52,10 +65,16 @@ app.get("/api/bus", async (req, res) => {
 
     const data = await response.json();
 
+    console.log("API SUCCESS");
+
     res.json(data);
   } catch (err) {
-    console.error("API fetch error:", err);
-    res.status(500).json({ error: "Failed to fetch bus data" });
+    console.error("API fetch error FULL:", err);
+
+    res.status(500).json({
+      error: "Failed to fetch bus data",
+      details: err.message,
+    });
   }
 });
 
