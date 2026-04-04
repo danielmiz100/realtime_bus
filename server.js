@@ -1,33 +1,33 @@
 import express from "express";
 import fetch from "node-fetch";
+import https from "https";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Force IPv4 (fixes ENOTFOUND issues on some hosts)
+const agent = new https.Agent({
+  family: 4,
+});
 
 // -----------------------------
 // ROUTES
 // -----------------------------
 
-// Health check
 app.get("/", (req, res) => {
   res.send("Bus API running");
 });
 
-// Test route
 app.get("/test", (req, res) => {
   res.json({ status: "ok", time: new Date() });
 });
 
-// ENV debug route
 app.get("/env", (req, res) => {
   res.json({
-    TRANSLINK_API_KEY: process.env.TRANSLINK_API_KEY
-      ? "SET"
-      : "NOT SET",
+    TRANSLINK_API_KEY: process.env.TRANSLINK_API_KEY ? "SET" : "NOT SET",
   });
 });
 
-// Bus lookup using TransLink API
 app.get("/api/bus", async (req, res) => {
   const stopId = req.query.stop;
 
@@ -52,6 +52,7 @@ app.get("/api/bus", async (req, res) => {
       headers: {
         Accept: "application/json",
       },
+      agent, // 👈 important fix
     });
 
     if (!response.ok) {
