@@ -1,88 +1,69 @@
 import express from "express";
-import fetch from "node-fetch";
-import https from "https";
+import { loadTripMap, getTripInfo } from "./tripLookup.js";
+import { getRealtimeFeed } from "./gtfsRealtime.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Force IPv4 (fixes ENOTFOUND issues on some hosts)
-const agent = new https.Agent({
-  family: 4,
+// ✅ ADD THIS BLOCK (CORS)
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  next();
 });
 
-// -----------------------------
-// ROUTES
-// -----------------------------
+loadTripMap();
 
-app.get("/", (req, res) => {
-  res.send("Bus API running");
-});
-
-app.get("/test", (req, res) => {
-  res.json({ status: "ok", time: new Date() });
-});
-
-app.get("/env", (req, res) => {
-  res.json({
-    TRANSLINK_API_KEY: process.env.TRANSLINK_API_KEY ? "SET" : "NOT SET",
-  });
-});
-
-app.get("/api/bus", async (req, res) => {
-  const stopId = req.query.stop;
-
-  if (!stopId) {
-    return res.status(400).json({ error: "Missing stop parameter" });
-  }
+app.get("/stop/:stopId", async (req, res) => {
+  const stopId = req.params.stopId;
 
   try {
-    const apiKey = process.env.TRANSLINK_API_KEY;
+    const entities = await getRealtimeFeed();
 
-    if (!apiKey) {
-      return res.status(500).json({
-        error: "Missing TRANSLINK_API_KEY",
-      });
+    const buses = [];
+
+    for (const entity of entities) {
+      if (!entity.tripUpdate) continue;
+
+      const tripId = entity.tripUpdate.trip.tripId;
+      const tripInfo = getTripInfo(tripId);
+
+      if (!tripInfo) continue;
+
+      for (const update of entity.tripUpdate.stopTimeUpdate || []) {
+        if (update.stopId !== stopId) continue;
+
+        const arrivalTime = update.arrival?.time?.toNumber?.() || null;
+        if (!arrivalTime) continue;
+
+        const now = Date.now() / 1000;
+        const minutesAway = Math.round((arrivalTime - now) / 60);
+
+        if (minutesAway < 0) continue;
+
+        buses.push({
+          route: tripInfo.route,
+          destination: tripInfo.destination,
+          arrival_unix: arrivalTime,
+          arrival_time: new Date(arrivalTime * 1000).toLocaleTimeString(),
+          minutes_away: minutesAway
+        });
+      }
     }
 
-    const url = `https://api.translink.ca/rttiapi/v1/stops/${stopId}/estimates?apikey=${apiKey}&count=3&timeframe=60`;
+    buses.sort((a, b) => a.arrival_unix - b.arrival_unix);
 
-    console.log("Fetching:", url);
-
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-      },
-      agent, // 👈 important fix
+    res.json({
+      last_updated: new Date().toLocaleTimeString(),
+      count: buses.length,
+      buses
     });
 
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("TransLink API ERROR RESPONSE:", text);
-
-      return res.status(500).json({
-        error: "TransLink API error",
-        details: text,
-      });
-    }
-
-    const data = await response.json();
-
-    console.log("API SUCCESS");
-
-    res.json(data);
   } catch (err) {
-    console.error("API fetch error FULL:", err);
-
-    res.status(500).json({
-      error: "Failed to fetch bus data",
-      details: err.message,
-    });
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch data" });
   }
 });
 
-// -----------------------------
-// START SERVER
-// -----------------------------
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });

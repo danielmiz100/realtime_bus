@@ -1,2 +1,3 @@
-gtfs/stop_times.txt
-gtfs/
+node_modules/
+.env
+.DS_Store
